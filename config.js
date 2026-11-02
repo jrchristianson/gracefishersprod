@@ -5,11 +5,11 @@
 
 window.GF_CONFIG = {
   // Microsoft Entra admin center > App registrations > your app > Overview
-  tenantId: "",   // "Directory (tenant) ID", e.g. "3f2c9e1a-...."
-  clientId: "",   // "Application (client) ID", e.g. "a81b44d0-...."
+  tenantId: "paste-directory-tenant-id-here",   // "Directory (tenant) ID", e.g. "3f2c9e1a-...."
+  clientId: "paste-application-client-id-here",   // "Application (client) ID", e.g. "a81b44d0-...."
 
   // The SharePoint site that holds the inventory lists (no trailing slash)
-  siteUrl: "",    // e.g. "https://gracefishers.sharepoint.com/sites/Production"
+  siteUrl: "https://gracefishers.sharepoint.com/sites/YourSiteName",    // e.g. "https://gracefishers.sharepoint.com/sites/Production"
 
   // List names. Only change these if you renamed the lists in SharePoint.
   lists: {
