@@ -1,0 +1,952 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Grace Fishers Gear Inventory</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky header with live counts and tabs, toolbar of filters, table (cards on phones), slide-in detail drawer. */
+:root {
+  --bg: #eef1f5; --surface: #ffffff; --surface-2: #f6f8fa; --ink: #16202c; --muted: #5a6574; --line: #d9dfe7;
+  --primary: #1d4d8c; --primary-ink: #ffffff; --tag: #f2b51c; --tag-ink: #1b1505;
+  --ok: #1f7a4d; --ok-bg: #e3f3ea; --info: #1d5fa8; --info-bg: #e3eefb; --warn: #8a5a00; --warn-bg: #fdf0d2;
+  --crit: #b3261e; --crit-bg: #fbe4e2; --mute-bg: #e9ecf0; --shadow: 0 10px 40px rgba(20,32,48,.18); --scrim: rgba(16,22,30,.45);
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif; --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #0f141a; --surface: #171e27; --surface-2: #1c2530; --ink: #e5eaf1; --muted: #97a2b2; --line: #2a3442;
+  --primary: #6fa3e6; --primary-ink: #0b1420; --tag: #f0b43a; --tag-ink: #1b1505;
+  --ok: #6fd3a0; --ok-bg: #173226; --info: #8dbcf2; --info-bg: #182a40; --warn: #f2c25c; --warn-bg: #352a12;
+  --crit: #f28b82; --crit-bg: #3a1c1a; --mute-bg: #232c37; --shadow: 0 10px 40px rgba(0,0,0,.5); --scrim: rgba(0,0,0,.6); color-scheme: dark; } }
+
+* { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+[hidden] { display: none !important; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding-block: 14px; }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand h1 { font: 700 26px/1 var(--display); letter-spacing: .01em; margin: 0; text-transform: uppercase; }
+.brand span { color: var(--muted); font-size: 13px; }
+.counts { display: flex; flex-wrap: wrap; gap: 8px; }
+.count { display: flex; align-items: baseline; gap: 6px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; }
+.count b { font: 600 18px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.count small { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.count[aria-pressed="true"] { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.count.crit b { color: var(--crit); } .count.warn b { color: var(--warn); } .count.info b { color: var(--info); }
+.me { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+.me .sync { font-family: var(--mono); font-size: 12px; }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--primary); cursor: pointer; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
+.tabs { display: flex; gap: 4px; }
+.tab { appearance: none; border: 0; background: none; padding: 10px 12px 9px; font: 700 17px/1 var(--display); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-bottom: 3px solid transparent; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--tag); }
+.badge { font: 600 12px/1 var(--mono); padding: 3px 6px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); letter-spacing: 0; }
+.demo { background: var(--warn-bg); color: var(--ink); font-size: 13.5px; }
+.demo .wrap { padding-block: 8px; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding-block: 16px; }
+.toolbar input[type=search] { flex: 1 1 260px; min-width: 0; }
+.field, .toolbar input, .toolbar select { height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.toolbar select { flex: 0 1 170px; min-width: 0; }
+.spacer { flex: 1 0 0; }
+.btn { height: 38px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--crit); }
+.btn.danger.armed { background: var(--crit); border-color: var(--crit); color: #fff; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.tag { display: inline-block; font: 600 12.5px/1 var(--mono); letter-spacing: .04em; padding: 5px 7px; border-radius: 3px; background: var(--tag); color: var(--tag-ink); white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.ok { color: var(--ok); background: var(--ok-bg); } .pill.info { color: var(--info); background: var(--info-bg); }
+.pill.warn { color: var(--warn); background: var(--warn-bg); } .pill.crit { color: var(--crit); background: var(--crit-bg); }
+.pill.muted { color: var(--muted); background: var(--mute-bg); }
+
+.tablebox { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; margin-bottom: 40px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; background: var(--surface-2); }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--surface-2); }
+tbody tr:last-child td { border-bottom: 0; }
+td.name b { display: block; font-weight: 600; }
+td.name small, td small { color: var(--muted); }
+td.chk, th.chk { width: 36px; padding-right: 0; }
+input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--primary); }
+.sub { color: var(--muted); font-size: 13px; }
+.qty b { font: 600 18px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.qty small { color: var(--muted); margin-left: 4px; }
+.step { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.step button { width: 36px; height: 32px; border: 0; background: none; cursor: pointer; font: 600 16px/1 var(--mono); color: var(--ink); }
+.step button + button { border-left: 1px solid var(--line); }
+.step button:hover { background: var(--surface-2); }
+.step button:disabled { opacity: .4; cursor: wait; }
+
+.empty { padding: 56px 20px; text-align: center; }
+.empty h2 { font: 700 24px/1.1 var(--display); text-transform: uppercase; margin: 0 0 8px; }
+.empty p { color: var(--muted); max-width: 52ch; margin: 0 auto 18px; text-wrap: balance; }
+.empty code { font-family: var(--mono); font-size: 13px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+
+.gate { min-height: 70vh; display: grid; place-items: center; padding: 24px 0; }
+.gate .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 32px 28px; max-width: 440px; width: 100%; text-align: center; }
+.gate h2 { font: 700 30px/1.05 var(--display); text-transform: uppercase; margin: 10px 0 8px; }
+.gate p { color: var(--muted); margin: 0 0 20px; }
+
+@media (max-width: 720px) {
+  .brand span { display: none; }
+  table, tbody, tr, td { display: block; } thead { display: none; }
+  tbody tr { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; padding: 12px; border-bottom: 1px solid var(--line); }
+  td { border: 0; padding: 0; min-width: 0; }
+  td.chk { grid-row: 1 / span 3; padding-top: 3px; }
+  td.c-tag { grid-column: 2; } td.c-status { grid-column: 3; grid-row: 1; justify-self: end; }
+  td.name, td.c-loc, td.c-cat { grid-column: 2 / span 2; }
+  td.c-cat { display: none; }
+  td.c-loc::before { content: "Location: "; color: var(--muted); }
+  td.cname { grid-column: 2; } td.c-qty { grid-column: 2; } td.c-step { grid-column: 3; justify-self: end; grid-row: 2; }
+  .toolbar select { flex: 1 1 40%; }
+}
+
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 20; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100%); background: var(--surface); z-index: 21; box-shadow: var(--shadow); display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.drawer-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
+.drawer-head h2 { font: 700 26px/1.05 var(--display); margin: 6px 0 0; text-wrap: balance; }
+.drawer-head .x { margin-left: auto; }
+.drawer-body { overflow-y: auto; padding: 18px 20px 28px; display: flex; flex-direction: column; gap: 22px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.callout { border-radius: 8px; padding: 12px 14px; font-size: 14px; }
+.callout.info { background: var(--info-bg); } .callout.crit { background: var(--crit-bg); } .callout.warn { background: var(--warn-bg); }
+.callout b { font-weight: 600; }
+dl.specs { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; }
+dl.specs dt { color: var(--muted); font-size: 13px; }
+dl.specs dd { margin: 0; min-width: 0; overflow-wrap: anywhere; white-space: pre-line; }
+dl.specs dd.mono { font-family: var(--mono); font-size: 13.5px; }
+h3.sec { font: 700 16px/1 var(--display); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+.qrrow { display: flex; gap: 16px; align-items: center; }
+.qr { width: 104px; height: 104px; background: #fff; padding: 6px; border-radius: 6px; border: 1px solid var(--line); flex: none; }
+.qr svg { width: 100%; height: 100%; display: block; }
+ol.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+ol.log li { display: grid; grid-template-columns: 92px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+ol.log li:first-child { border-top: 0; }
+ol.log time { color: var(--muted); font: 500 12.5px/1.6 var(--mono); }
+ol.log .kind { font-weight: 600; }
+ol.log .by { color: var(--muted); font-size: 12.5px; }
+ol.log .delta { font-family: var(--mono); font-weight: 600; }
+ol.log .delta.neg { color: var(--crit); } ol.log .delta.pos { color: var(--ok); }
+.stock { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.stock b { font: 600 44px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.stock .u { font: 700 20px/1 var(--display); text-transform: uppercase; color: var(--muted); }
+.adjust { display: grid; grid-template-columns: 90px 1fr; gap: 8px; }
+.adjust .field { min-width: 0; }
+.adjust .actions { grid-column: 1 / -1; }
+
+.modal { position: fixed; z-index: 31; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(520px, calc(100% - 32px)); max-height: calc(100% - 48px); overflow-y: auto;
+  background: var(--surface); border-radius: 10px; box-shadow: var(--shadow); padding: 20px; }
+.modal-scrim { z-index: 30; }
+.modal h2 { font: 700 24px/1.1 var(--display); text-transform: uppercase; margin: 0 0 14px; }
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 500; min-width: 0; }
+.form label.full { grid-column: 1 / -1; }
+.form .field { width: 100%; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.form textarea.field { height: auto; min-height: 76px; padding: 8px 10px; resize: vertical; }
+.form .check { flex-direction: row; align-items: center; gap: 8px; color: var(--ink); }
+.modal .actions { justify-content: flex-end; margin-top: 18px; }
+.err { color: var(--crit); font-size: 13.5px; margin-top: 10px; }
+@media (max-width: 520px) { .form { grid-template-columns: 1fr; } }
+
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; z-index: 40; font-size: 14px; max-width: calc(100% - 32px); }
+@media (prefers-reduced-motion: no-preference) { .drawer { animation: slide .18s ease-out; } @keyframes slide { from { transform: translateX(24px); opacity: .6; } } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap bar">
+    <div class="brand"><h1>Gear Inventory</h1><span>Grace Fishers AV &amp; IT</span></div>
+    <div class="counts" id="counts" hidden></div>
+    <div class="me" id="me"></div>
+  </div>
+  <div class="wrap"><nav class="tabs" id="tabs" role="tablist" hidden></nav></div>
+  <div class="demo" id="demoBar" hidden><div class="wrap"><b>Demo mode.</b> This is sample data and nothing is saved. Fill in <code>config.js</code> to connect to SharePoint.</div></div>
+</header>
+
+<main class="wrap" id="gate">
+  <div class="gate"><div class="card"><span class="tag">GF-0001</span><h2 id="gateTitle">Loading</h2><p id="gateText">Starting up…</p><div id="gateAction"></div></div></div>
+</main>
+
+<main class="wrap" id="equipView" hidden>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Search name, tag, serial, model, borrower…" aria-label="Search equipment">
+    <select id="fCat" aria-label="Category"></select>
+    <select id="fLoc" aria-label="Location"></select>
+    <select id="fStatus" aria-label="Status"></select>
+    <button class="btn" id="btnLabels" title="Printable sheet of QR asset-tag labels">Labels</button>
+    <button class="btn" id="btnCsv">Export CSV</button>
+    <button class="btn primary" id="btnAdd">+ Add item</button>
+  </div>
+  <div class="tablebox" id="listBox"></div>
+</main>
+
+<main class="wrap" id="consView" hidden>
+  <div class="toolbar">
+    <input type="search" id="cq" placeholder="Search batteries, tape, foamies…" aria-label="Search supplies">
+    <select id="cCat" aria-label="Supply category"></select>
+    <select id="cStock" aria-label="Stock level"><option value="">All stock levels</option><option value="low">Low or out</option></select>
+    <button class="btn" id="cLabels" title="Printable QR labels for bins and shelves">Bin labels</button>
+    <button class="btn" id="cCsv" title="Exports the list as shown; filter to Low or out for a shopping list">Export CSV</button>
+    <button class="btn primary" id="cAdd">+ Add supply</button>
+  </div>
+  <div class="tablebox" id="consBox"></div>
+</main>
+
+<div id="drawerRoot"></div>
+<div id="modalRoot"></div>
+<div id="toast" class="toast" hidden role="status"></div>
+
+<script src="config.js"></script>
+<script src="vendor/msal-browser.min.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script>
+"use strict";
+/* ============================================================
+   Settings
+   ============================================================ */
+const C = window.GF_CONFIG || {};
+const LISTS = Object.assign({ equipment: "GF Equipment", equipmentLog: "GF Equipment Log", supplies: "GF Supplies", supplyLog: "GF Supply Log" }, C.lists || {});
+const DEMO = !window.GF_TEST_TOKEN && !(C.tenantId && C.clientId && C.siteUrl);
+const TAG_PREFIX = C.tagPrefix || "GF-";
+const PAGE_URL = location.origin + location.pathname.replace(/index\.html$/, "");
+const APP_URL = C.appUrl || PAGE_URL;
+const SCOPES = ["Sites.ReadWrite.All"];
+const GRAPH = "https://graph.microsoft.com/v1.0";
+const POLL_MS = 45000;
+
+const CATEGORIES = ["Audio", "Video", "Lighting", "Computers", "Networking", "Displays & Projectors", "Cables & Adapters", "Instruments", "Staging & Rigging", "Other"];
+const CONS_CATEGORIES = ["Batteries", "Tape", "Mic accessories", "Cables & Adapters", "Lamps & Bulbs", "Media & Storage", "Cleaning", "Other"];
+const UNITS = ["each", "rolls", "packs", "boxes", "pairs", "feet"];
+const STATUS = {
+  available: { label: "Available", cls: "ok" },
+  out: { label: "Checked out", cls: "info" },
+  repair: { label: "Needs repair", cls: "warn" },
+  service: { label: "Out for service", cls: "crit" },
+  retired: { label: "Retired", cls: "muted" },
+};
+const STATUS_BY_LABEL = Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [v.label, k]));
+const LOG_KIND = { created: "Added to inventory", checkout: "Checked out", checkin: "Checked in", repair: "Maintenance", edit: "Details edited" };
+const SUPPLY_KIND = { created: "Added", used: "Used", restocked: "Restocked", count: "Count corrected" };
+
+/* ============================================================
+   Small helpers
+   ============================================================ */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const localISO = (d) => { d = new Date(d); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const todayISO = () => localISO(new Date());
+const addDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return localISO(d); };
+const fmtDate = (iso) => { if (!iso) return "—"; const d = iso.length === 10 ? new Date(iso + "T12:00:00") : new Date(iso); return isNaN(d) ? iso : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); };
+const fmtStamp = (iso) => { const d = new Date(iso); return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + "<br>" + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }); };
+const ss = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} }, del: (k) => { try { sessionStorage.removeItem(k); } catch {} } };
+const isOverdue = (it) => it.status === "out" && it.checkout?.dueAt && it.checkout.dueAt < todayISO();
+const statusOf = (it) => isOverdue(it) ? { label: "Overdue", cls: "crit" } : (STATUS[it.status] || STATUS.available);
+const consState = (c) => (c.qty ?? 0) <= 0 ? { label: "Out", cls: "crit" } : (c.reorderAt != null && c.qty <= c.reorderAt) ? { label: "Low", cls: "warn" } : { label: "In stock", cls: "ok" };
+const isLow = (c) => consState(c).cls !== "ok";
+const byTag = (a, b) => a.tag.localeCompare(b.tag, undefined, { numeric: true });
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), 2800); }
+
+/* ============================================================
+   Sign-in (Microsoft Entra via MSAL)
+   ============================================================ */
+const Auth = {
+  pca: null, account: null,
+  async init() {
+    if (window.GF_TEST_TOKEN) { this.account = { name: "Test User" }; return; }
+    if (DEMO) { this.account = { name: "Demo user" }; return; }
+    if (!window.msal) throw new Error("The sign-in library (vendor/msal-browser.min.js) didn’t load.");
+    this.pca = await msal.PublicClientApplication.createPublicClientApplication({
+      auth: { clientId: C.clientId, authority: "https://login.microsoftonline.com/" + C.tenantId, redirectUri: PAGE_URL, navigateToLoginRequestUrl: true },
+      cache: { cacheLocation: "localStorage" },
+    });
+    let res = null;
+    try { res = await this.pca.handleRedirectPromise(); } catch (e) { console.error(e); }
+    this.account = res?.account || this.pca.getActiveAccount() || this.pca.getAllAccounts()[0] || null;
+    if (this.account) this.pca.setActiveAccount(this.account);
+    const saved = ss.get("gf-hash");
+    if (saved) { ss.del("gf-hash"); if (!location.hash || /code=|state=/.test(location.hash)) history.replaceState(null, "", location.pathname + location.search + saved); }
+  },
+  signIn() { ss.set("gf-hash", location.hash); return this.pca.loginRedirect({ scopes: SCOPES }); },
+  signOut() { return this.pca.logoutRedirect({ account: this.account, postLogoutRedirectUri: PAGE_URL }); },
+  async token() {
+    if (window.GF_TEST_TOKEN) return window.GF_TEST_TOKEN;
+    try { return (await this.pca.acquireTokenSilent({ scopes: SCOPES, account: this.account })).accessToken; }
+    catch (e) {
+      if (e instanceof msal.InteractionRequiredAuthError) { ss.set("gf-hash", location.hash); await this.pca.acquireTokenRedirect({ scopes: SCOPES }); }
+      throw e;
+    }
+  },
+};
+
+/* ============================================================
+   Microsoft Graph helpers
+   ============================================================ */
+async function g(method, path, body, headers = {}) {
+  const token = await Auth.token();
+  const r = await fetch(path.startsWith("http") ? path : GRAPH + path, {
+    method, headers: { Authorization: "Bearer " + token, Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...headers },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (r.status === 204) return null;
+  const j = await r.json().catch(() => null);
+  if (!r.ok) { const e = new Error(j?.error?.message || `${r.status} ${r.statusText}`); e.status = r.status; e.code = j?.error?.code; throw e; }
+  return j;
+}
+async function gAll(path, headers) {
+  const out = []; let url = path;
+  while (url) { const j = await g("GET", url, null, headers); out.push(...(j.value || [])); url = j["@odata.nextLink"] || null; }
+  return out;
+}
+const FILTER_HDR = { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" };
+const q1 = (s) => String(s).replace(/'/g, "''");
+
+/* Field mapping: app <-> SharePoint columns */
+function itemFromSp(li) {
+  const f = li.fields || {};
+  return { spId: li.id, tag: f.AssetTag || "", name: f.Title || "", category: f.Category || "", location: f.Location || "", make: f.Make || "", model: f.Model || "",
+    serial: f.SerialNumber || "", notes: f.Notes || "", status: STATUS_BY_LABEL[f.Status] || "available",
+    checkout: f.Borrower ? { borrower: f.Borrower, outAt: f.CheckedOutOn || "", dueAt: f.DueBack || "", note: f.CheckoutNote || "" } : null,
+    createdAt: li.createdDateTime || "" };
+}
+function spFromItem(p) {
+  const f = {}, map = { name: "Title", tag: "AssetTag", category: "Category", location: "Location", make: "Make", model: "Model", serial: "SerialNumber", notes: "Notes" };
+  for (const [k, col] of Object.entries(map)) if (k in p) f[col] = p[k] ?? "";
+  if ("status" in p) f.Status = STATUS[p.status].label;
+  if ("checkout" in p) { const c = p.checkout || {}; f.Borrower = c.borrower || ""; f.CheckedOutOn = c.outAt || ""; f.DueBack = c.dueAt || ""; f.CheckoutNote = c.note || ""; }
+  return f;
+}
+function consFromSp(li) {
+  const f = li.fields || {};
+  return { spId: li.id, code: f.BinCode || "", name: f.Title || "", category: f.Category || "", location: f.Location || "", qty: Number(f.OnHand ?? 0),
+    unit: f.Unit || "each", reorderAt: f.ReorderAt == null || f.ReorderAt === "" ? null : Number(f.ReorderAt), reorderInfo: f.ReorderInfo || "", notes: f.Notes || "" };
+}
+function spFromCons(p) {
+  const f = {}, map = { name: "Title", code: "BinCode", category: "Category", location: "Location", unit: "Unit", reorderInfo: "ReorderInfo", notes: "Notes" };
+  for (const [k, col] of Object.entries(map)) if (k in p) f[col] = p[k] ?? "";
+  if ("qty" in p) f.OnHand = p.qty;
+  if ("reorderAt" in p) f.ReorderAt = p.reorderAt;
+  return f;
+}
+
+/* ============================================================
+   Data store: SharePoint lists through Graph
+   ============================================================ */
+const GraphStore = {
+  site: null, lists: {}, siteName: "",
+  async init() {
+    const u = new URL(C.siteUrl);
+    const path = u.pathname.replace(/\/+$/, "");
+    const site = await g("GET", path ? `/sites/${u.hostname}:${path}?$select=id,displayName,webUrl` : `/sites/${u.hostname}?$select=id,displayName,webUrl`);
+    this.site = site.id; this.siteName = site.displayName;
+    const ls = await gAll(`/sites/${this.site}/lists?$select=id,displayName`);
+    const missing = [];
+    for (const [k, name] of Object.entries(LISTS)) { const l = ls.find((x) => x.displayName === name); if (l) this.lists[k] = l.id; else missing.push(name); }
+    if (missing.length) { const e = new Error("Missing lists: " + missing.join(", ")); e.missing = missing; throw e; }
+  },
+  items(k) { return `/sites/${this.site}/lists/${this.lists[k]}/items`; },
+  async loadItems() { return (await gAll(this.items("equipment") + "?$expand=fields")).map(itemFromSp); },
+  async createItem(p) { return itemFromSp(await g("POST", this.items("equipment"), { fields: spFromItem(p) })); },
+  async updateItem(spId, p) { await g("PATCH", `${this.items("equipment")}/${spId}/fields`, spFromItem(p)); },
+  async deleteItem(spId, tag) {
+    for (const li of await gAll(this.items("equipmentLog") + `?$select=id&$expand=fields($select=AssetTag)&$filter=fields/AssetTag eq '${q1(tag)}'`, FILTER_HDR))
+      await g("DELETE", `${this.items("equipmentLog")}/${li.id}`);
+    await g("DELETE", `${this.items("equipment")}/${spId}`);
+  },
+  async loadLog(tag) {
+    return (await gAll(this.items("equipmentLog") + `?$expand=fields&$filter=fields/AssetTag eq '${q1(tag)}'`, FILTER_HDR))
+      .map((li) => ({ at: li.createdDateTime, type: li.fields.Kind, text: li.fields.Detail || "", borrower: li.fields.Borrower || "", by: li.createdBy?.user?.displayName || "" }))
+      .sort((a, b) => b.at.localeCompare(a.at));
+  },
+  async addLog(tag, e) { await g("POST", this.items("equipmentLog"), { fields: { Title: LOG_KIND[e.type] || e.type, AssetTag: tag, Kind: e.type, Detail: e.text || "", Borrower: e.borrower || "" } }); },
+
+  async loadCons() { return (await gAll(this.items("supplies") + "?$expand=fields")).map(consFromSp); },
+  async createCons(p) { return consFromSp(await g("POST", this.items("supplies"), { fields: spFromCons(p) })); },
+  async updateCons(spId, p) { await g("PATCH", `${this.items("supplies")}/${spId}/fields`, spFromCons(p)); },
+  async deleteCons(spId, code) {
+    for (const li of await gAll(this.items("supplyLog") + `?$select=id&$expand=fields($select=BinCode)&$filter=fields/BinCode eq '${q1(code)}'`, FILTER_HDR))
+      await g("DELETE", `${this.items("supplyLog")}/${li.id}`);
+    await g("DELETE", `${this.items("supplies")}/${spId}`);
+  },
+  // Re-reads the current count and writes with If-Match, so two people tapping at once don't overwrite each other.
+  async adjustQty(spId, delta) {
+    for (let i = 0; i < 4; i++) {
+      const li = await g("GET", `${this.items("supplies")}/${spId}?$expand=fields`);
+      const before = Number(li.fields.OnHand ?? 0), qty = Math.max(0, before + delta);
+      if (qty === before) return { before, qty };
+      // Last attempt goes without If-Match so a tenant that rejects the header can't block updates.
+      try { await g("PATCH", `${this.items("supplies")}/${spId}/fields`, { OnHand: qty }, i < 3 && li.eTag ? { "If-Match": li.eTag } : {}); return { before, qty }; }
+      catch (e) { if (e.status !== 412) throw e; }
+    }
+    throw new Error("Someone else is updating this count. Try again in a moment.");
+  },
+  async loadSupplyLog(code) {
+    return (await gAll(this.items("supplyLog") + `?$expand=fields&$filter=fields/BinCode eq '${q1(code)}'`, FILTER_HDR))
+      .map((li) => ({ at: li.createdDateTime, kind: li.fields.Kind, delta: Number(li.fields.Change ?? 0), qty: Number(li.fields.OnHandAfter ?? 0), note: li.fields.Note || "", by: li.createdBy?.user?.displayName || "" }))
+      .sort((a, b) => b.at.localeCompare(a.at));
+  },
+  async addSupplyLog(code, e) { await g("POST", this.items("supplyLog"), { fields: { Title: SUPPLY_KIND[e.kind] || e.kind, BinCode: code, Kind: e.kind, Change: e.delta, OnHandAfter: e.qty, Note: e.note || "" } }); },
+};
+
+/* ============================================================
+   Data store: demo mode (in memory, sample data)
+   ============================================================ */
+const DemoStore = (() => {
+  let n = 100; const now = Date.now(), ago = (h) => new Date(now - h * 3600e3).toISOString();
+  const items = [
+    { tag: "GF-0001", name: "Yamaha CL5 console", category: "Audio", location: "Auditorium FOH", make: "Yamaha", model: "CL5", serial: "EXAMPLE-0001", status: "available" },
+    { tag: "GF-0002", name: "Wireless handheld mic #1", category: "Audio", location: "Booth mic drawer", make: "Shure", model: "ULXD2/SM58", serial: "EXAMPLE-0002", status: "out", checkout: { borrower: "Example: Youth team", outAt: addDays(-5), dueAt: addDays(-1), note: "Fall retreat" } },
+    { tag: "GF-0003", name: "Ross Carbonite switcher", category: "Video", location: "Video control", make: "Ross", model: "Carbonite", status: "available" },
+    { tag: "GF-0004", name: "Staff laptop (example)", category: "Computers", location: "Office IT closet", make: "Dell", model: "Latitude 5440", status: "repair" },
+  ].map((x) => ({ ...x, spId: String(++n), notes: "", checkout: x.checkout || null, createdAt: ago(200) }));
+  const cons = [
+    { code: "c-demo-aa", name: "AA batteries (Procell)", category: "Batteries", location: "Booth drawer 2", qty: 18, unit: "each", reorderAt: 24, reorderInfo: "Example: Amazon, 48-pack" },
+    { code: "c-demo-gaff", name: "Black gaff tape 2\"", category: "Tape", location: "Stage left bin", qty: 6, unit: "rolls", reorderAt: 3, reorderInfo: "" },
+    { code: "c-demo-foam", name: "Mic foamies (black)", category: "Mic accessories", location: "Booth mic drawer", qty: 40, unit: "each", reorderAt: 10, reorderInfo: "" },
+  ].map((x) => ({ ...x, spId: String(++n), notes: "" }));
+  const log = [{ tag: "GF-0002", at: ago(120), type: "checkout", text: "Example entry", borrower: "Example: Youth team", by: "Demo user" }];
+  const slog = [{ code: "c-demo-aa", at: ago(30), kind: "used", delta: -6, qty: 18, note: "Example: Sunday mics", by: "Demo user" }];
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  const wait = () => new Promise((r) => setTimeout(r, 120));
+  return {
+    async init() {}, siteName: "Demo",
+    async loadItems() { await wait(); return clone(items); },
+    async createItem(p) { const it = { ...clone(p), spId: String(++n), createdAt: new Date().toISOString(), checkout: p.checkout || null }; items.push(it); return clone(it); },
+    async updateItem(spId, p) { Object.assign(items.find((i) => i.spId === spId), clone(p)); },
+    async deleteItem(spId) { items.splice(items.findIndex((i) => i.spId === spId), 1); },
+    async loadLog(tag) { return clone(log.filter((l) => l.tag === tag)).sort((a, b) => b.at.localeCompare(a.at)); },
+    async addLog(tag, e) { log.push({ tag, at: new Date().toISOString(), by: "Demo user", ...e }); },
+    async loadCons() { await wait(); return clone(cons); },
+    async createCons(p) { const c = { ...clone(p), spId: String(++n) }; cons.push(c); return clone(c); },
+    async updateCons(spId, p) { Object.assign(cons.find((c) => c.spId === spId), clone(p)); },
+    async deleteCons(spId) { cons.splice(cons.findIndex((c) => c.spId === spId), 1); },
+    async adjustQty(spId, delta) { const c = cons.find((x) => x.spId === spId); const before = c.qty; c.qty = Math.max(0, before + delta); return { before, qty: c.qty }; },
+    async loadSupplyLog(code) { return clone(slog.filter((l) => l.code === code)).sort((a, b) => b.at.localeCompare(a.at)); },
+    async addSupplyLog(code, e) { slog.push({ code, at: new Date().toISOString(), by: "Demo user", ...e }); },
+  };
+})();
+const Store = DEMO ? DemoStore : GraphStore;
+
+/* ============================================================
+   App state
+   ============================================================ */
+const S = {
+  items: new Map(), cons: new Map(), loaded: false, lastSync: null, pending: 0,
+  selected: new Set(), consSel: new Set(), busy: new Set(),
+  tab: "equip", openTag: null, openCons: null, log: [], logFor: null,
+  filter: { q: "", cat: "", loc: "", status: "" }, cf: { q: "", cat: "", low: false },
+};
+
+/* ============================================================
+   Boot
+   ============================================================ */
+(async function boot() {
+  $("#demoBar").hidden = !DEMO;
+  wireToolbar(); wireConsToolbar();
+  try { await Auth.init(); }
+  catch (e) { return gate("Can’t start", esc(e.message), ""); }
+  if (!Auth.account) {
+    gate("Sign in", "Use your Grace Fishers Microsoft 365 account to open the equipment and supply inventory.", `<button class="btn primary" id="signIn">Sign in with Microsoft</button>`);
+    $("#signIn").onclick = () => Auth.signIn();
+    return;
+  }
+  renderMe();
+  gate("Loading", "Connecting to SharePoint…", "");
+  try { await Store.init(); }
+  catch (e) {
+    if (e.missing) return gate("Lists not set up", `The SharePoint site is missing: ${e.missing.map((m) => `<code>${esc(m)}</code>`).join(", ")}. Open <a href="setup.html">setup.html</a> once to create them.`, "");
+    if (e.status === 403 || e.status === 401) return gate("No access", "Your account can’t open the inventory site in SharePoint. Ask whoever manages the site to add you as a member.", "");
+    return gate("Can’t connect", `SharePoint said: ${esc(e.message)}. Check the <code>siteUrl</code> in config.js.`, "");
+  }
+  try { await reload(); }
+  catch (e) { return gate("Can’t load the inventory", esc(e.message), `<button class="btn primary" onclick="location.reload()">Try again</button>`); }
+  $("#gate").hidden = true; $("#tabs").hidden = false;
+  setTab(location.hash === "#consumables" ? "cons" : "equip", true);
+  routeFromHash();
+  window.addEventListener("hashchange", routeFromHash);
+  setInterval(() => { if (document.visibilityState === "visible" && !S.pending) reload().catch(() => {}); }, POLL_MS);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !S.pending) reload().catch(() => {}); });
+})();
+
+function gate(title, html, actionHtml) {
+  $("#gate").hidden = false; $("#equipView").hidden = true; $("#consView").hidden = true; $("#tabs").hidden = true; $("#counts").hidden = true;
+  $("#gateTitle").textContent = title; $("#gateText").innerHTML = html; $("#gateAction").innerHTML = actionHtml;
+}
+function renderMe() {
+  const sync = S.pending ? "Saving…" : S.lastSync ? "Updated " + S.lastSync.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
+  $("#me").innerHTML = `<span class="sync">${esc(sync)}</span>${S.loaded ? `<button class="linkbtn" id="refresh">Refresh</button>` : ""}<span>${esc(Auth.account?.name || "")}</span>${!DEMO && !window.GF_TEST_TOKEN ? `<button class="linkbtn" id="signOut">Sign out</button>` : ""}`;
+  $("#refresh")?.addEventListener("click", () => reload().then(() => toast("Up to date")).catch((e) => toast("Couldn’t refresh: " + e.message)));
+  $("#signOut")?.addEventListener("click", () => Auth.signOut());
+}
+
+async function reload() {
+  const [items, cons] = await Promise.all([Store.loadItems(), Store.loadCons()]);
+  S.items = new Map(items.filter((i) => i.tag).map((i) => [i.tag, i]));
+  S.cons = new Map(cons.filter((c) => c.code).map((c) => [c.code, c]));
+  for (const t of [...S.selected]) if (!S.items.has(t)) S.selected.delete(t);
+  for (const t of [...S.consSel]) if (!S.cons.has(t)) S.consSel.delete(t);
+  S.loaded = true; S.lastSync = new Date();
+  renderAll();
+}
+function renderAll() {
+  renderMe(); renderTabs(); renderFilters(); renderCounts(); renderList(); renderConsFilters(); renderConsList();
+  if (S.openTag) renderDrawer(); else if (S.openCons) renderConsDrawer();
+}
+// Runs a write, then refreshes from SharePoint so everyone's view matches the lists.
+async function save(fn, okMsg) {
+  S.pending++; renderMe();
+  try { const r = await fn(); S.pending--; await reload().catch(() => {}); if (okMsg) toast(okMsg); return r; }
+  catch (e) { S.pending--; renderMe(); throw e; }
+}
+function failMsg(e) { return e?.status === 403 ? "You don’t have permission to change the inventory list in SharePoint." : (e?.message || "Something went wrong. Try again."); }
+
+/* ============================================================
+   Routing + tabs
+   ============================================================ */
+function routeFromHash() {
+  if (!S.loaded) return;
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h === "consumables") { setTab("cons", true); if (S.openTag || S.openCons) closeDrawer(true); }
+  else if (h && S.items.has(h)) { setTab("equip", true); if (S.openTag !== h) openDrawer(h); }
+  else if (h && S.cons.has(h)) { setTab("cons", true); if (S.openCons !== h) openConsDrawer(h); }
+  else if (!h && (S.openTag || S.openCons)) closeDrawer(true);
+}
+function setTab(t, fromHash) {
+  S.tab = t;
+  $("#equipView").hidden = t !== "equip"; $("#consView").hidden = t !== "cons"; $("#counts").hidden = t !== "equip";
+  renderTabs();
+  if (!fromHash) history.replaceState(null, "", location.pathname + location.search + (t === "cons" ? "#consumables" : ""));
+}
+function renderTabs() {
+  const low = [...S.cons.values()].filter(isLow).length;
+  $("#tabs").innerHTML = `<button class="tab" role="tab" data-t="equip" aria-selected="${S.tab === "equip"}">Equipment</button>
+    <button class="tab" role="tab" data-t="cons" aria-selected="${S.tab === "cons"}">Consumables${low ? ` <span class="badge" title="${low} low or out of stock">${low} low</span>` : ""}</button>`;
+  $("#tabs").querySelectorAll(".tab").forEach((b) => b.onclick = () => { if (S.openTag || S.openCons) closeDrawer(); setTab(b.dataset.t); });
+}
+
+/* ============================================================
+   Equipment list
+   ============================================================ */
+function wireToolbar() {
+  $("#q").addEventListener("input", (e) => { S.filter.q = e.target.value.trim().toLowerCase(); renderList(); });
+  $("#fCat").addEventListener("change", (e) => { S.filter.cat = e.target.value; renderList(); });
+  $("#fLoc").addEventListener("change", (e) => { S.filter.loc = e.target.value; renderList(); });
+  $("#fStatus").addEventListener("change", (e) => { S.filter.status = e.target.value; renderCounts(); renderList(); });
+  $("#btnAdd").addEventListener("click", () => openItemForm(null));
+  $("#btnCsv").addEventListener("click", exportCsv);
+  $("#btnLabels").addEventListener("click", printLabels);
+}
+const locations = () => [...new Set([...S.items.values()].map((i) => i.location).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+const allLocations = () => [...new Set([...S.items.values(), ...S.cons.values()].map((i) => i.location).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+const categories = () => [...new Set([...CATEGORIES, ...[...S.items.values()].map((i) => i.category).filter(Boolean)])];
+function renderFilters() {
+  const opt = (v, l, cur) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(l)}</option>`;
+  $("#fCat").innerHTML = opt("", "All categories", S.filter.cat) + categories().map((c) => opt(c, c, S.filter.cat)).join("");
+  $("#fLoc").innerHTML = opt("", "All locations", S.filter.loc) + locations().map((c) => opt(c, c, S.filter.loc)).join("");
+  $("#fStatus").innerHTML = opt("", "Any status", S.filter.status) + opt("overdue", "Overdue", S.filter.status) + Object.entries(STATUS).map(([k, v]) => opt(k, v.label, S.filter.status)).join("");
+}
+function renderCounts() {
+  const all = [...S.items.values()];
+  const n = { "": all.filter((i) => i.status !== "retired").length, out: all.filter((i) => i.status === "out").length, overdue: all.filter(isOverdue).length, repair: all.filter((i) => i.status === "repair" || i.status === "service").length };
+  const c = (key, label, cls) => `<button class="count ${cls}" data-k="${key}" aria-pressed="${S.filter.status === key}"><b>${n[key]}</b><small>${label}</small></button>`;
+  $("#counts").innerHTML = c("", "In service", "") + c("out", "Checked out", "info") + c("overdue", "Overdue", "crit") + c("repair", "Repair", "warn");
+  $("#counts").querySelectorAll(".count").forEach((b) => b.onclick = () => { S.filter.status = S.filter.status === b.dataset.k ? "" : b.dataset.k; renderFilters(); renderCounts(); renderList(); });
+}
+function filtered() {
+  const f = S.filter;
+  return [...S.items.values()].filter((i) => {
+    if (f.cat && i.category !== f.cat) return false;
+    if (f.loc && i.location !== f.loc) return false;
+    if (f.status === "overdue" ? !isOverdue(i) : f.status === "repair" ? !(i.status === "repair" || i.status === "service") : f.status && i.status !== f.status) return false;
+    if (!f.status && i.status === "retired" && !f.q) return false;
+    if (f.q && ![i.tag, i.name, i.make, i.model, i.serial, i.location, i.category, i.checkout?.borrower, i.notes].join(" ").toLowerCase().includes(f.q)) return false;
+    return true;
+  }).sort(byTag);
+}
+function renderList() {
+  if (!S.loaded) return;
+  const box = $("#listBox");
+  if (S.items.size === 0) {
+    box.innerHTML = `<div class="empty"><h2>No gear logged yet</h2><p>Add your first piece of equipment, like a wireless mic, a camera or a staff laptop. Each item gets an asset tag starting at <span class="tag">${TAG_PREFIX}0001</span> that you can print as a QR label.</p><button class="btn primary" id="emptyAdd">+ Add first item</button></div>`;
+    $("#emptyAdd").onclick = () => openItemForm(null); updateLabelBtn(); return;
+  }
+  const rows = filtered();
+  if (!rows.length) { box.innerHTML = `<div class="empty"><h2>No matches</h2><p>Nothing matches these filters. Clear the search or pick a different status.</p></div>`; updateLabelBtn(); return; }
+  const allSel = rows.every((r) => S.selected.has(r.tag));
+  box.innerHTML = `<table><thead><tr><th class="chk"><input type="checkbox" id="selAll" aria-label="Select all shown" ${allSel ? "checked" : ""}></th><th>Tag</th><th>Item</th><th>Category</th><th>Location</th><th>Status</th></tr></thead><tbody>${
+    rows.map((i) => { const st = statusOf(i); const who = i.status === "out" && i.checkout ? `<small>${esc(i.checkout.borrower)} · due ${esc(fmtDate(i.checkout.dueAt))}</small>` : "";
+      return `<tr data-tag="${esc(i.tag)}"><td class="chk"><input type="checkbox" aria-label="Select ${esc(i.tag)}" ${S.selected.has(i.tag) ? "checked" : ""}></td>
+      <td class="c-tag"><span class="tag">${esc(i.tag)}</span></td>
+      <td class="name"><b>${esc(i.name)}</b><small>${esc([i.make, i.model].filter(Boolean).join(" "))}</small></td>
+      <td class="c-cat">${esc(i.category || "—")}</td><td class="c-loc">${esc(i.location || "—")}</td>
+      <td class="c-status"><span class="pill ${st.cls}">${st.label}</span>${who ? "<br>" + who : ""}</td></tr>`; }).join("")}</tbody></table>`;
+  box.querySelectorAll("tbody tr").forEach((tr) => {
+    tr.addEventListener("click", (e) => { if (e.target.closest("td.chk")) return; openDrawer(tr.dataset.tag); });
+    tr.querySelector("input").addEventListener("change", (e) => { e.target.checked ? S.selected.add(tr.dataset.tag) : S.selected.delete(tr.dataset.tag); updateLabelBtn(); const sa = $("#selAll"); if (sa) sa.checked = rows.every((r) => S.selected.has(r.tag)); });
+  });
+  $("#selAll").addEventListener("change", (e) => { rows.forEach((r) => e.target.checked ? S.selected.add(r.tag) : S.selected.delete(r.tag)); renderList(); });
+  updateLabelBtn();
+}
+function updateLabelBtn() { $("#btnLabels").textContent = S.selected.size ? `Labels (${S.selected.size})` : "Labels"; }
+
+/* ============================================================
+   Equipment drawer
+   ============================================================ */
+function openDrawer(tag) {
+  if (!S.items.has(tag)) return;
+  S.openTag = tag; S.openCons = null; S.log = []; S.logFor = null;
+  if (decodeURIComponent(location.hash.slice(1)) !== tag) location.hash = tag;
+  renderDrawer(); loadLog(tag);
+}
+async function loadLog(tag) {
+  try { const log = await Store.loadLog(tag); if (S.openTag === tag) { S.log = log; S.logFor = tag; renderDrawer(); } }
+  catch (e) { if (S.openTag === tag) { S.log = []; S.logFor = "error"; renderDrawer(); } }
+}
+function closeDrawer(fromHash) {
+  S.openTag = null; S.openCons = null; $("#drawerRoot").innerHTML = "";
+  if (!fromHash && location.hash) history.replaceState(null, "", location.pathname + location.search + (S.tab === "cons" ? "#consumables" : ""));
+}
+function qrSvg(hash) {
+  if (typeof qrcode !== "function") return "";
+  const q = qrcode(0, "M"); q.addData(`${APP_URL}#${hash}`); q.make();
+  return q.createSvgTag({ cellSize: 2, margin: 0, scalable: true });
+}
+function drawerShell(titleHtml, bodyHtml, label) {
+  $("#drawerRoot").innerHTML = `<div class="scrim" id="dScrim"></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(label)}">
+    <div class="drawer-head"><div>${titleHtml}</div><button class="btn x" id="dClose" aria-label="Close">✕</button></div><div class="drawer-body">${bodyHtml}</div></aside>`;
+  $("#dScrim").onclick = () => closeDrawer(); $("#dClose").onclick = () => closeDrawer();
+}
+function armDelete(btn, onConfirm) {
+  btn.onclick = async () => {
+    if (!btn.classList.contains("armed")) { btn.classList.add("armed"); btn.textContent = "Confirm delete"; setTimeout(() => { if (btn.isConnected) { btn.classList.remove("armed"); btn.textContent = "Delete"; } }, 4000); return; }
+    btn.disabled = true;
+    try { await onConfirm(); } catch (e) { btn.disabled = false; toast(failMsg(e)); }
+  };
+}
+function renderDrawer() {
+  const it = S.items.get(S.openTag);
+  if (!it) { closeDrawer(); return; }
+  const st = statusOf(it);
+  let banner = "";
+  if (it.status === "out" && it.checkout) banner = `<div class="callout ${isOverdue(it) ? "crit" : "info"}"><b>${esc(it.checkout.borrower)}</b> has this since ${esc(fmtDate(it.checkout.outAt))}. ${isOverdue(it) ? "It was due back" : "Due back"} <b>${esc(fmtDate(it.checkout.dueAt))}</b>.${it.checkout.note ? `<br>${esc(it.checkout.note)}` : ""}</div>`;
+  else if (it.status === "repair") banner = `<div class="callout warn">Flagged as <b>needs repair</b>. Log the fix under Maintenance when it’s back in working order.</div>`;
+  else if (it.status === "service") banner = `<div class="callout crit"><b>Out for service.</b> Not available until it returns.</div>`;
+  const spec = (k, v, cls) => v ? `<dt>${k}</dt><dd${cls ? ` class="${cls}"` : ""}>${esc(v)}</dd>` : "";
+  const logHtml = S.logFor !== it.tag ? `<li><time></time><div class="sub">${S.logFor === "error" ? "Couldn’t load history." : "Loading history…"}</div></li>`
+    : S.log.length ? S.log.map((l) => `<li><time>${fmtStamp(l.at)}</time><div><span class="kind">${esc(LOG_KIND[l.type] || l.type)}</span>${l.borrower ? ` · ${esc(l.borrower)}` : ""}${l.text ? `<div>${esc(l.text)}</div>` : ""}${l.by ? `<div class="by">by ${esc(l.by)}</div>` : ""}</div></li>`).join("")
+    : `<li><time></time><div class="sub">No history yet.</div></li>`;
+  drawerShell(`<span class="tag">${esc(it.tag)}</span> <span class="pill ${st.cls}">${st.label}</span><h2>${esc(it.name)}</h2>`, `${banner}
+    <div class="actions">
+      ${it.status === "out" ? `<button class="btn primary" id="aIn">Check in</button>` : `<button class="btn primary" id="aOut" ${it.status === "retired" ? "disabled" : ""}>Check out</button>`}
+      <button class="btn" id="aMaint">Log maintenance</button><button class="btn" id="aEdit">Edit</button><button class="btn danger" id="aDel">Delete</button></div>
+    <section><h3 class="sec">Details</h3><dl class="specs">
+      ${spec("Category", it.category)}${spec("Location", it.location)}${spec("Make", it.make)}${spec("Model", it.model)}${spec("Serial #", it.serial, "mono")}
+      ${spec("Added", it.createdAt ? fmtDate(it.createdAt) : "")}${spec("Notes", it.notes)}</dl></section>
+    <section><h3 class="sec">Asset label</h3><div class="qrrow"><div class="qr">${qrSvg(it.tag)}</div>
+      <p class="sub">Scan with a phone camera to open this item. Use <b>Labels</b> on the main list to print a sheet.</p></div></section>
+    <section><h3 class="sec">History</h3><ol class="log">${logHtml}</ol></section>`, it.name);
+  $("#aOut")?.addEventListener("click", () => openCheckout(it));
+  $("#aIn")?.addEventListener("click", () => openCheckin(it));
+  $("#aMaint").onclick = () => openMaint(it);
+  $("#aEdit").onclick = () => openItemForm(it);
+  armDelete($("#aDel"), async () => { await save(() => Store.deleteItem(it.spId, it.tag), `Deleted ${it.tag}`); S.selected.delete(it.tag); closeDrawer(); });
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if ($("#modalRoot").innerHTML) closeModal(); else if (S.openTag || S.openCons) closeDrawer(); } });
+
+/* ============================================================
+   Modals + equipment forms
+   ============================================================ */
+function closeModal() { $("#modalRoot").innerHTML = ""; }
+function modal(title, bodyHtml, submitLabel, onSubmit) {
+  $("#modalRoot").innerHTML = `<div class="scrim modal-scrim" id="mScrim"></div><form class="modal" id="mForm" novalidate><h2>${title}</h2>${bodyHtml}
+    <div class="err" id="mErr" hidden></div><div class="actions"><button type="button" class="btn" id="mCancel">Cancel</button><button class="btn primary" id="mOk">${submitLabel}</button></div></form>`;
+  $("#mScrim").onclick = closeModal; $("#mCancel").onclick = closeModal;
+  $("#mForm").addEventListener("submit", async (e) => {
+    e.preventDefault(); const err = $("#mErr"); err.hidden = true; const ok = $("#mOk"); ok.disabled = true; ok.textContent = "Saving…";
+    try { const msg = await onSubmit(new FormData(e.target)); if (msg) { err.textContent = msg; err.hidden = false; ok.disabled = false; ok.textContent = submitLabel; return; } closeModal(); }
+    catch (ex) { ok.disabled = false; ok.textContent = submitLabel; err.textContent = "Couldn’t save: " + failMsg(ex); err.hidden = false; }
+  });
+  setTimeout(() => $("#mForm .field")?.focus(), 30);
+}
+function nextTag() {
+  let max = 0; for (const t of S.items.keys()) { const m = t.match(/(\d+)$/); if (m) max = Math.max(max, +m[1]); }
+  return TAG_PREFIX + String(max + 1).padStart(4, "0");
+}
+const fdText = (fd, k) => String(fd.get(k) || "").trim();
+function openItemForm(it) {
+  const v = (k) => esc(it?.[k] ?? "");
+  const catOpts = `<option value="">Choose a category</option>` + categories().map((c) => `<option ${it?.category === c ? "selected" : ""}>${esc(c)}</option>`).join("");
+  modal(it ? `Edit ${esc(it.tag)}` : "Add equipment", `<div class="form">
+    <label class="full">Item name<input class="field" name="name" id="f-name" required value="${v("name")}" placeholder="e.g. Shure ULXD2 handheld mic"></label>
+    <label>Category<select class="field" name="category" id="f-cat">${catOpts}</select></label>
+    <label>Location<input class="field" name="location" id="f-loc" list="locList" value="${v("location")}" placeholder="e.g. Auditorium booth"></label>
+    <label>Make<input class="field" name="make" id="f-make" value="${v("make")}" placeholder="e.g. Shure"></label>
+    <label>Model<input class="field" name="model" id="f-model" value="${v("model")}" placeholder="e.g. ULXD2/SM58"></label>
+    <label class="full">Serial number<input class="field" name="serial" id="f-serial" value="${v("serial")}"></label>
+    <label class="full">Notes<textarea class="field" name="notes" id="f-notes" placeholder="Accessories, case, where the charger lives…">${v("notes")}</textarea></label>
+    <datalist id="locList">${locations().map((l) => `<option value="${esc(l)}">`).join("")}</datalist></div>
+    ${it ? "" : `<p class="sub">It will be tagged <span class="tag">${nextTag()}</span>.</p>`}`, it ? "Save changes" : "Add item", async (fd) => {
+    const data = {}; for (const k of ["name", "category", "location", "make", "model", "serial", "notes"]) data[k] = fdText(fd, k);
+    if (!data.name) return "Give the item a name.";
+    if (!data.category) return "Pick a category.";
+    if (it) { await save(async () => { await Store.updateItem(it.spId, data); await Store.addLog(it.tag, { type: "edit" }); }, "Saved"); return; }
+    await Store.loadItems().then((list) => { for (const x of list) if (x.tag) S.items.set(x.tag, x); }).catch(() => {});
+    const tag = nextTag();
+    await save(async () => { await Store.createItem({ ...data, tag, status: "available", checkout: null }); await Store.addLog(tag, { type: "created" }); }, `Added ${tag}`);
+    openDrawer(tag);
+  });
+}
+function openCheckout(it) {
+  modal(`Check out ${esc(it.tag)}`, `<p class="sub" style="margin:-6px 0 14px">${esc(it.name)}</p><div class="form">
+    <label class="full">Borrowed by<input class="field" name="borrower" id="co-who" required placeholder="Name of the person taking it"></label>
+    <label>Due back<input class="field" type="date" name="due" id="co-due" value="${addDays(7)}" min="${todayISO()}"></label>
+    <label>&nbsp;<span class="sub" style="padding-top:8px">Default is one week.</span></label>
+    <label class="full">Purpose or note<input class="field" name="note" id="co-note" placeholder="e.g. Youth retreat"></label></div>`, "Check out", async (fd) => {
+    const borrower = fdText(fd, "borrower"), due = fdText(fd, "due"), note = fdText(fd, "note");
+    if (!borrower) return "Enter who is taking it.";
+    if (!due) return "Pick a due-back date.";
+    await save(async () => {
+      await Store.updateItem(it.spId, { status: "out", checkout: { borrower, outAt: todayISO(), dueAt: due, note } });
+      await Store.addLog(it.tag, { type: "checkout", borrower, text: `Due ${fmtDate(due)}${note ? " · " + note : ""}` });
+    }, `${it.tag} checked out to ${borrower}`);
+    loadLog(it.tag);
+  });
+}
+function openCheckin(it) {
+  modal(`Check in ${esc(it.tag)}`, `<p class="sub" style="margin:-6px 0 14px">${esc(it.name)} · from ${esc(it.checkout?.borrower || "")}</p><div class="form">
+    <label class="full">Return location<input class="field" name="location" id="ci-loc" list="locList2" value="${esc(it.location || "")}"></label>
+    <label class="full">Condition note<input class="field" name="note" id="ci-note" placeholder="Optional, e.g. missing windscreen"></label>
+    <label class="full check"><input type="checkbox" name="broken" id="ci-broken"> Came back damaged or not working</label>
+    <datalist id="locList2">${locations().map((l) => `<option value="${esc(l)}">`).join("")}</datalist></div>`, "Check in", async (fd) => {
+    const broken = !!fd.get("broken"), note = fdText(fd, "note"), loc = fdText(fd, "location");
+    await save(async () => {
+      await Store.updateItem(it.spId, { status: broken ? "repair" : "available", checkout: null, location: loc || it.location || "" });
+      await Store.addLog(it.tag, { type: "checkin", borrower: it.checkout?.borrower || "", text: [broken ? "Returned needing repair" : "", note].filter(Boolean).join(" · ") });
+    }, `${it.tag} checked in`);
+    loadLog(it.tag);
+  });
+}
+function openMaint(it) {
+  const opts = Object.entries(STATUS).filter(([k]) => k !== "out" || it.status === "out")
+    .map(([k, s]) => `<option value="${k}" ${k === it.status ? "selected" : ""}>${s.label}${k === it.status ? " (current)" : ""}</option>`).join("");
+  modal(`Maintenance · ${esc(it.tag)}`, `<p class="sub" style="margin:-6px 0 14px">${esc(it.name)}</p><div class="form">
+    <label class="full">What happened<textarea class="field" name="text" id="m-text" required placeholder="e.g. Replaced battery door; sent out for repair (RMA 48211)"></textarea></label>
+    <label class="full">Status after this<select class="field" name="status" id="m-status">${opts}</select></label></div>`, "Save entry", async (fd) => {
+    const text = fdText(fd, "text"), status = String(fd.get("status"));
+    if (!text) return "Describe the work or problem.";
+    await save(async () => {
+      if (status !== it.status) await Store.updateItem(it.spId, { status, ...(status !== "out" ? { checkout: null } : {}) });
+      await Store.addLog(it.tag, { type: "repair", text: status !== it.status ? `${text} · now ${STATUS[status].label}` : text });
+    }, "Maintenance logged");
+    loadLog(it.tag);
+  });
+}
+
+/* ============================================================
+   Consumables
+   ============================================================ */
+const consCategories = () => [...new Set([...CONS_CATEGORIES, ...[...S.cons.values()].map((c) => c.category).filter(Boolean)])];
+function wireConsToolbar() {
+  $("#cq").addEventListener("input", (e) => { S.cf.q = e.target.value.trim().toLowerCase(); renderConsList(); });
+  $("#cCat").addEventListener("change", (e) => { S.cf.cat = e.target.value; renderConsList(); });
+  $("#cStock").addEventListener("change", (e) => { S.cf.low = e.target.value === "low"; renderConsList(); });
+  $("#cAdd").addEventListener("click", () => openConsForm(null));
+  $("#cCsv").addEventListener("click", exportConsCsv);
+  $("#cLabels").addEventListener("click", printBinLabels);
+}
+function renderConsFilters() {
+  const opt = (v, l) => `<option value="${esc(v)}"${v === S.cf.cat ? " selected" : ""}>${esc(l)}</option>`;
+  $("#cCat").innerHTML = opt("", "All categories") + consCategories().map((c) => opt(c, c)).join("");
+}
+function filteredCons() {
+  const f = S.cf;
+  return [...S.cons.values()].filter((c) => {
+    if (f.cat && c.category !== f.cat) return false;
+    if (f.low && !isLow(c)) return false;
+    if (f.q && ![c.name, c.category, c.location, c.reorderInfo, c.notes].join(" ").toLowerCase().includes(f.q)) return false;
+    return true;
+  }).sort((a, b) => (a.category || "").localeCompare(b.category || "") || a.name.localeCompare(b.name));
+}
+function renderConsList() {
+  if (!S.loaded) return;
+  const box = $("#consBox");
+  if (S.cons.size === 0) {
+    box.innerHTML = `<div class="empty"><h2>No supplies yet</h2><p>Track things you use up, like AA batteries, gaff tape and mic foamies, by count instead of by tag. Set a reorder level and the tab warns you when stock runs low.</p><button class="btn primary" id="cEmptyAdd">+ Add first supply</button></div>`;
+    $("#cEmptyAdd").onclick = () => openConsForm(null); updateConsLabelBtn(); return;
+  }
+  const rows = filteredCons();
+  if (!rows.length) { box.innerHTML = `<div class="empty"><h2>No matches</h2><p>${S.cf.low ? "Everything is stocked above its reorder level." : "Nothing matches. Clear the search or pick another category."}</p></div>`; updateConsLabelBtn(); return; }
+  const allSel = rows.every((r) => S.consSel.has(r.code));
+  box.innerHTML = `<table><thead><tr><th class="chk"><input type="checkbox" id="cSelAll" aria-label="Select all shown" ${allSel ? "checked" : ""}></th><th>Supply</th><th>Category</th><th>Location</th><th>On hand</th><th>Status</th><th>Quick adjust</th></tr></thead><tbody>${
+    rows.map((c) => { const st = consState(c), busy = S.busy.has(c.code);
+      return `<tr data-id="${esc(c.code)}"><td class="chk"><input type="checkbox" aria-label="Select ${esc(c.name)}" ${S.consSel.has(c.code) ? "checked" : ""}></td>
+      <td class="cname"><b>${esc(c.name)}</b></td><td class="c-cat">${esc(c.category || "—")}</td><td class="c-loc">${esc(c.location || "—")}</td>
+      <td class="c-qty qty"><b>${c.qty}</b><small>${esc(c.unit)}${c.reorderAt != null ? ` · reorder at ${c.reorderAt}` : ""}</small></td>
+      <td class="c-status"><span class="pill ${st.cls}">${st.label}</span></td>
+      <td class="c-step"><span class="step"><button data-d="-1" aria-label="Use one" ${busy || !(c.qty > 0) ? "disabled" : ""}>−</button><button data-d="1" aria-label="Add one" ${busy ? "disabled" : ""}>+</button></span></td></tr>`; }).join("")}</tbody></table>`;
+  box.querySelectorAll("tbody tr").forEach((tr) => {
+    const id = tr.dataset.id;
+    tr.addEventListener("click", (e) => { if (e.target.closest("td.chk") || e.target.closest(".step")) return; openConsDrawer(id); });
+    tr.querySelector("input").addEventListener("change", (e) => { e.target.checked ? S.consSel.add(id) : S.consSel.delete(id); updateConsLabelBtn(); const sa = $("#cSelAll"); if (sa) sa.checked = rows.every((r) => S.consSel.has(r.code)); });
+    tr.querySelectorAll(".step button").forEach((b) => b.addEventListener("click", () => adjustCons(id, +b.dataset.d, "")));
+  });
+  $("#cSelAll").addEventListener("change", (e) => { rows.forEach((r) => e.target.checked ? S.consSel.add(r.code) : S.consSel.delete(r.code)); renderConsList(); });
+  updateConsLabelBtn();
+}
+function updateConsLabelBtn() { $("#cLabels").textContent = S.consSel.size ? `Bin labels (${S.consSel.size})` : "Bin labels"; }
+
+async function adjustCons(code, delta, note) {
+  const c = S.cons.get(code); if (!c || S.busy.has(code)) return false;
+  S.busy.add(code); renderConsList(); if (S.openCons === code) renderConsDrawer();
+  try {
+    await save(async () => {
+      const { before, qty } = await Store.adjustQty(c.spId, delta);
+      if (qty !== before) await Store.addSupplyLog(code, { kind: qty < before ? "used" : "restocked", delta: qty - before, qty, note });
+    });
+    return true;
+  } catch (e) { toast(failMsg(e)); return false; }
+  finally { S.busy.delete(code); renderConsList(); if (S.openCons === code) { renderConsDrawer(); loadSupplyLog(code); } }
+}
+function openConsDrawer(code) {
+  if (!S.cons.has(code)) return;
+  S.openTag = null; S.openCons = code; S.log = []; S.logFor = null;
+  if (decodeURIComponent(location.hash.slice(1)) !== code) location.hash = code;
+  renderConsDrawer(); loadSupplyLog(code);
+}
+async function loadSupplyLog(code) {
+  try { const log = await Store.loadSupplyLog(code); if (S.openCons === code) { S.log = log; S.logFor = code; renderConsDrawer(); } }
+  catch { if (S.openCons === code) { S.log = []; S.logFor = "error"; renderConsDrawer(); } }
+}
+function renderConsDrawer() {
+  const c = S.cons.get(S.openCons);
+  if (!c) { closeDrawer(); return; }
+  const st = consState(c), busy = S.busy.has(c.code);
+  const keepNote = $("#adjNote")?.value || "", keepN = $("#adjN")?.value || "1";
+  const spec = (k, v) => v ? `<dt>${k}</dt><dd>${esc(v)}</dd>` : "";
+  const histHtml = S.logFor !== c.code ? `<li><time></time><div class="sub">${S.logFor === "error" ? "Couldn’t load activity." : "Loading activity…"}</div></li>`
+    : S.log.length ? S.log.map((h) => `<li><time>${fmtStamp(h.at)}</time><div><span class="kind">${esc(SUPPLY_KIND[h.kind] || h.kind)}</span> <span class="delta ${h.delta < 0 ? "neg" : "pos"}">${h.delta > 0 ? "+" : ""}${h.delta}</span> <span class="sub">→ ${h.qty} ${esc(c.unit)}</span>${h.note ? `<div>${esc(h.note)}</div>` : ""}${h.by ? `<div class="by">by ${esc(h.by)}</div>` : ""}</div></li>`).join("")
+    : `<li><time></time><div class="sub">No activity yet.</div></li>`;
+  drawerShell(`<span class="pill ${st.cls}">${st.label}</span><h2>${esc(c.name)}</h2>`, `
+    <div class="stock"><b>${c.qty}</b><span class="u">${esc(c.unit)} on hand</span>${c.reorderAt != null ? `<span class="sub">Reorder at ${c.reorderAt}</span>` : ""}</div>
+    ${isLow(c) ? `<div class="callout warn"><b>Time to reorder.</b> ${c.reorderInfo ? esc(c.reorderInfo) : "Stock is at or below the reorder level."}</div>` : ""}
+    <form class="adjust" id="adjForm" novalidate>
+      <input class="field" type="number" id="adjN" min="1" step="1" value="${esc(keepN)}" aria-label="Quantity">
+      <input class="field" id="adjNote" value="${esc(keepNote)}" placeholder="Note, e.g. Sunday wireless mics" aria-label="Note">
+      <div class="actions"><button type="button" class="btn" id="aTake" ${busy || !(c.qty > 0) ? "disabled" : ""}>Take out</button><button type="button" class="btn primary" id="aRestock" ${busy ? "disabled" : ""}>Restock</button>
+      <span class="spacer"></span><button type="button" class="btn" id="aEdit">Edit</button><button type="button" class="btn danger" id="aDel">Delete</button></div></form>
+    <section><h3 class="sec">Details</h3><dl class="specs">${spec("Category", c.category)}${spec("Location", c.location)}${spec("Where to reorder", c.reorderInfo)}${spec("Notes", c.notes)}</dl></section>
+    <section><h3 class="sec">Bin label</h3><div class="qrrow"><div class="qr">${qrSvg(c.code)}</div>
+      <p class="sub">Stick this on the bin or shelf, not on each item. Scanning it opens this page so anyone can log what they took.</p></div></section>
+    <section><h3 class="sec">Activity</h3><ol class="log">${histHtml}</ol></section>`, c.name);
+  const amt = () => Math.max(1, Math.floor(+$("#adjN").value || 1));
+  $("#adjForm").addEventListener("submit", (e) => e.preventDefault());
+  $("#aTake").onclick = async () => { const n = amt(), note = $("#adjNote").value.trim(); if (await adjustCons(c.code, -n, note)) { toast(`Logged ${n} used`); const f = $("#adjNote"); if (f) f.value = ""; } };
+  $("#aRestock").onclick = async () => { const n = amt(), note = $("#adjNote").value.trim(); if (await adjustCons(c.code, n, note)) { toast(`Added ${n} ${c.unit}`); const f = $("#adjNote"); if (f) f.value = ""; } };
+  $("#aEdit").onclick = () => openConsForm(c);
+  armDelete($("#aDel"), async () => { await save(() => Store.deleteCons(c.spId, c.code), `Deleted ${c.name}`); S.consSel.delete(c.code); closeDrawer(); });
+}
+function openConsForm(c) {
+  const v = (k) => esc(c?.[k] ?? "");
+  const catOpts = `<option value="">Choose a category</option>` + consCategories().map((x) => `<option ${c?.category === x ? "selected" : ""}>${esc(x)}</option>`).join("");
+  modal(c ? "Edit supply" : "Add supply", `<div class="form">
+    <label class="full">Supply name<input class="field" name="name" id="s-name" required value="${v("name")}" placeholder="e.g. AA batteries (Procell)"></label>
+    <label>Category<select class="field" name="category" id="s-cat">${catOpts}</select></label>
+    <label>Location<input class="field" name="location" id="s-loc" list="sLocList" value="${v("location")}" placeholder="e.g. Booth drawer 2"></label>
+    <label>${c ? "Count on hand" : "Starting count"}<input class="field" type="number" min="0" step="1" name="qty" id="s-qty" value="${c ? c.qty : ""}" placeholder="0"></label>
+    <label>Counted in<input class="field" name="unit" id="s-unit" list="unitList" value="${v("unit") || "each"}"></label>
+    <label>Reorder when at or below<input class="field" type="number" min="0" step="1" name="reorderAt" id="s-reorder" value="${c?.reorderAt ?? ""}" placeholder="e.g. 24"></label>
+    <label>Where to reorder<input class="field" name="reorderInfo" id="s-where" value="${v("reorderInfo")}" placeholder="e.g. Amazon, 48-pack"></label>
+    <label class="full">Notes<textarea class="field" name="notes" id="s-notes">${v("notes")}</textarea></label>
+    <datalist id="sLocList">${allLocations().map((l) => `<option value="${esc(l)}">`).join("")}</datalist>
+    <datalist id="unitList">${UNITS.map((u) => `<option value="${u}">`).join("")}</datalist></div>`, c ? "Save changes" : "Add supply", async (fd) => {
+    const data = {}; for (const k of ["name", "category", "location", "unit", "reorderInfo", "notes"]) data[k] = fdText(fd, k);
+    if (!data.name) return "Give the supply a name.";
+    if (!data.category) return "Pick a category.";
+    data.unit = data.unit || "each";
+    const ro = fdText(fd, "reorderAt"); data.reorderAt = ro === "" ? null : Math.max(0, Math.floor(+ro));
+    const qty = Math.max(0, Math.floor(+(fd.get("qty") || 0)));
+    if (c) {
+      const before = S.cons.get(c.code)?.qty ?? c.qty;
+      await save(async () => {
+        await Store.updateCons(c.spId, { ...data, qty });
+        if (qty !== before) await Store.addSupplyLog(c.code, { kind: "count", delta: qty - before, qty, note: "" });
+      }, "Saved");
+      loadSupplyLog(c.code); return;
+    }
+    const code = "c-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    await save(async () => { await Store.createCons({ ...data, qty, code }); await Store.addSupplyLog(code, { kind: "created", delta: qty, qty, note: "" }); }, `Added ${data.name}`);
+    openConsDrawer(code);
+  });
+}
+
+/* ============================================================
+   Exports + labels
+   ============================================================ */
+function downloadFile(filename, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+const csvCell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+function exportCsv() {
+  const rows = [...S.items.values()].sort(byTag);
+  if (!rows.length) { toast("Nothing to export yet."); return; }
+  const cols = [["Tag", (i) => i.tag], ["Name", (i) => i.name], ["Category", (i) => i.category], ["Location", (i) => i.location], ["Make", (i) => i.make], ["Model", (i) => i.model],
+    ["Serial", (i) => i.serial], ["Status", (i) => statusOf(i).label], ["Borrower", (i) => i.checkout?.borrower], ["Due back", (i) => i.checkout?.dueAt], ["Notes", (i) => i.notes], ["Added", (i) => (i.createdAt || "").slice(0, 10)]];
+  downloadFile(`GF-gear-inventory-${todayISO()}.csv`, "﻿" + [cols.map((c) => csvCell(c[0])).join(","), ...rows.map((i) => cols.map(([, f]) => csvCell(f(i))).join(","))].join("\r\n"), "text/csv");
+}
+function exportConsCsv() {
+  const rows = filteredCons();
+  if (!rows.length) { toast("Nothing to export."); return; }
+  const head = ["Supply", "Category", "Location", "On hand", "Unit", "Reorder at", "Status", "Where to reorder", "Notes"];
+  downloadFile(`GF-supplies-${S.cf.low ? "to-reorder-" : ""}${todayISO()}.csv`, "﻿" + [head.map(csvCell).join(","),
+    ...rows.map((c) => [c.name, c.category, c.location, c.qty, c.unit, c.reorderAt ?? "", consState(c).label, c.reorderInfo, c.notes].map(csvCell).join(","))].join("\r\n"), "text/csv");
+}
+function printLabels() {
+  const list = (S.selected.size ? [...S.selected].map((t) => S.items.get(t)).filter(Boolean) : filtered()).sort(byTag);
+  if (!list.length) { toast("No items to label. Add gear or clear the filters."); return; }
+  labelSheet(list.map((i) => ({ hash: i.tag, over: "Property of Grace Fishers Church", big: i.tag, small: i.name, mono: true })), `GF-asset-labels-${todayISO()}.html`);
+}
+function printBinLabels() {
+  const list = S.consSel.size ? [...S.consSel].map((id) => S.cons.get(id)).filter(Boolean) : filteredCons();
+  if (!list.length) { toast("No supplies to label yet."); return; }
+  labelSheet(list.map((c) => ({ hash: c.code, over: [c.category, c.location].filter(Boolean).join(" · ") || "Grace Fishers supplies", big: c.name,
+    small: `Scan to log use${c.reorderAt != null ? ` · reorder at ${c.reorderAt} ${c.unit}` : ""}` })), `GF-bin-labels-${todayISO()}.html`);
+}
+// Avery 5160 / 8160: 3 x 10 labels, 2.625in x 1in, US Letter. Opens in a new tab with a Print button.
+function labelSheet(list, filename) {
+  const labels = list.map((e) => `<div class="l"><div class="q">${qrSvg(e.hash)}</div><div class="t"><div class="o">${esc(e.over)}</div><div class="g${e.mono ? "" : " w"}">${esc(e.big)}</div><div class="n">${esc(e.small)}</div></div></div>`).join("");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(filename)}</title><style>
+@page{size:letter;margin:0}*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif}
+.help{padding:14px 24px;background:#fff6d6;border-bottom:1px solid #e5d38a;font-size:14px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.help button{font:inherit;padding:6px 14px;border-radius:6px;border:1px solid #1d4d8c;background:#1d4d8c;color:#fff;cursor:pointer}@media print{.help{display:none}}
+.sheet{width:8.5in;padding:0.5in 0.1875in 0;display:grid;grid-template-columns:repeat(3,2.625in);grid-auto-rows:1in;column-gap:0.125in}
+.l{display:flex;align-items:center;gap:0.08in;padding:0.06in 0.1in;overflow:hidden;break-inside:avoid}.sheet>.l:nth-child(30n){break-after:page}
+.q{width:0.82in;height:0.82in;flex:none}.q svg{width:100%;height:100%}.t{min-width:0}.o{font-size:6.5pt;text-transform:uppercase;letter-spacing:.04em;color:#444}
+.g{font:700 15pt/1.1 "Courier New",monospace;letter-spacing:.02em}.g.w{font:700 11pt/1.1 Arial,Helvetica,sans-serif;letter-spacing:0;max-height:2.25em;overflow:hidden;margin:1px 0}
+.n{font-size:7.5pt;line-height:1.15;max-height:2.3em;overflow:hidden}
+</style></head><body><div class="help"><span><b>${list.length} labels.</b> Print on Avery 5160 / 8160 sheets (30 per page) at 100% scale with margins set to None.</span><button onclick="print()">Print</button></div><div class="sheet">${labels}</div></body></html>`;
+  const w = window.open("", "_blank");
+  if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+  else { downloadFile(filename, html, "text/html"); toast("Pop-ups are blocked, so the label sheet was downloaded instead."); }
+}
+</script>
+</body>
+</html>
