@@ -9,7 +9,7 @@ window.GF_CONFIG = {
   clientId: "c0a4e459-e6e5-44e3-87af-8d2fa0d5647b",   // "Application (client) ID", e.g. "a81b44d0-...."
 
   // The SharePoint site that holds the inventory lists (no trailing slash)
-  siteUrl: "https://gracefishers.sharepoint.com/sites/productioninventory",    // e.g. "https://gracefishers.sharepoint.com/sites/Production"
+  siteUrl: "gracefishers.sharepoint.com/productioninventory/SitePages/Home",    // e.g. "https://gracefishers.sharepoint.com/sites/Production"
 
   // List names. Only change these if you renamed the lists in SharePoint.
   lists: {
