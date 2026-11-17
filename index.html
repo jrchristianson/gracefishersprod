@@ -214,7 +214,10 @@ ol.log .delta.neg { color: var(--crit); } ol.log .delta.pos { color: var(--ok); 
 <div id="modalRoot"></div>
 <div id="toast" class="toast" hidden role="status"></div>
 
-<script src="config.js"></script>
+<script>
+  // Always fetch the newest config.js so phones never keep an old copy of your settings.
+  document.write('<script src="config.js?v=' + Date.now() + '"><\/script>');
+</script>
 <script src="vendor/msal-browser.min.js"></script>
 <script src="vendor/qrcode.js"></script>
 <script>
@@ -349,8 +352,24 @@ function spFromCons(p) {
 /* ============================================================
    Data store: SharePoint lists through Graph
    ============================================================ */
+// The columns each list needs: API name -> label people see in SharePoint.
+// SharePoint sometimes stores a column under an internal name built from its label (e.g. "Asset_x0020_tag"),
+// so the app looks up the real internal names when it connects instead of assuming them.
+const COLUMNS = {
+  equipment: { AssetTag: "Asset tag", Category: "Category", Location: "Location", Make: "Make", Model: "Model", SerialNumber: "Serial number", Notes: "Notes",
+    Status: "Status", Borrower: "Checked out to", CheckedOutOn: "Checked out on", DueBack: "Due back", CheckoutNote: "Checkout note" },
+  equipmentLog: { AssetTag: "Asset tag", Kind: "Kind", Detail: "Detail", Borrower: "Borrower" },
+  supplies: { BinCode: "Bin code", Category: "Category", Location: "Location", OnHand: "On hand", Unit: "Counted in", ReorderAt: "Reorder at", ReorderInfo: "Where to reorder", Notes: "Notes" },
+  supplyLog: { BinCode: "Bin code", Kind: "Kind", Change: "Change", OnHandAfter: "On hand after", Note: "Note" },
+};
+const normCol = (x) => String(x || "").toLowerCase().replace(/_x0020_/g, "").replace(/[^a-z0-9]/g, "");
+function matchColumn(cols, api, label) {
+  return cols.find((c) => c.name === api) || cols.find((c) => normCol(c.displayName) === normCol(label)) ||
+    cols.find((c) => normCol(c.name) === normCol(label)) || cols.find((c) => normCol(c.displayName) === normCol(api));
+}
+
 const GraphStore = {
-  site: null, lists: {}, siteName: "",
+  site: null, lists: {}, cols: {}, siteName: "",
   async init() {
     const u = new URL(C.siteUrl);
     const path = u.pathname.replace(/\/+$/, "");
@@ -360,49 +379,67 @@ const GraphStore = {
     const missing = [];
     for (const [k, name] of Object.entries(LISTS)) { const l = ls.find((x) => x.displayName === name); if (l) this.lists[k] = l.id; else missing.push(name); }
     if (missing.length) { const e = new Error("Missing lists: " + missing.join(", ")); e.missing = missing; throw e; }
+    const missingCols = [];
+    await Promise.all(Object.keys(COLUMNS).map(async (k) => {
+      const cols = await gAll(`/sites/${this.site}/lists/${this.lists[k]}/columns?$select=name,displayName`);
+      this.cols[k] = {};
+      for (const [api, label] of Object.entries(COLUMNS[k])) {
+        const c = matchColumn(cols, api, label);
+        if (c) this.cols[k][api] = c.name; else missingCols.push(`${LISTS[k]}: ${label}`);
+      }
+    }));
+    if (missingCols.length) { const e = new Error("Missing columns: " + missingCols.join(", ")); e.missingCols = missingCols; throw e; }
   },
+  col(k, api) { return this.cols[k]?.[api] || api; },
+  // SharePoint internal names -> app names (on read) and back (on write)
+  inF(k, f = {}) { const out = { ...f }; for (const [api, real] of Object.entries(this.cols[k] || {})) if (real !== api && real in f) out[api] = f[real]; return out; },
+  outF(k, f) { const out = {}; for (const [key, v] of Object.entries(f)) out[this.col(k, key)] = v; return out; },
+  row(k, li) { return { ...li, fields: this.inF(k, li.fields) }; },
   items(k) { return `/sites/${this.site}/lists/${this.lists[k]}/items`; },
-  async loadItems() { return (await gAll(this.items("equipment") + "?$expand=fields")).map(itemFromSp); },
-  async createItem(p) { return itemFromSp(await g("POST", this.items("equipment"), { fields: spFromItem(p) })); },
-  async updateItem(spId, p) { await g("PATCH", `${this.items("equipment")}/${spId}/fields`, spFromItem(p)); },
+  logQuery(k, api, value, idsOnly) {
+    const c = this.col(k, api);
+    return this.items(k) + `?${idsOnly ? `$select=id&$expand=fields($select=${c})` : "$expand=fields"}&$filter=fields/${c} eq '${q1(value)}'`;
+  },
+
+  async loadItems() { return (await gAll(this.items("equipment") + "?$expand=fields")).map((li) => itemFromSp(this.row("equipment", li))); },
+  async createItem(p) { return itemFromSp(this.row("equipment", await g("POST", this.items("equipment"), { fields: this.outF("equipment", spFromItem(p)) }))); },
+  async updateItem(spId, p) { await g("PATCH", `${this.items("equipment")}/${spId}/fields`, this.outF("equipment", spFromItem(p))); },
   async deleteItem(spId, tag) {
-    for (const li of await gAll(this.items("equipmentLog") + `?$select=id&$expand=fields($select=AssetTag)&$filter=fields/AssetTag eq '${q1(tag)}'`, FILTER_HDR))
-      await g("DELETE", `${this.items("equipmentLog")}/${li.id}`);
+    for (const li of await gAll(this.logQuery("equipmentLog", "AssetTag", tag, true), FILTER_HDR)) await g("DELETE", `${this.items("equipmentLog")}/${li.id}`);
     await g("DELETE", `${this.items("equipment")}/${spId}`);
   },
   async loadLog(tag) {
-    return (await gAll(this.items("equipmentLog") + `?$expand=fields&$filter=fields/AssetTag eq '${q1(tag)}'`, FILTER_HDR))
-      .map((li) => ({ at: li.createdDateTime, type: li.fields.Kind, text: li.fields.Detail || "", borrower: li.fields.Borrower || "", by: li.createdBy?.user?.displayName || "" }))
+    return (await gAll(this.logQuery("equipmentLog", "AssetTag", tag), FILTER_HDR))
+      .map((li) => { const f = this.inF("equipmentLog", li.fields); return { at: li.createdDateTime, type: f.Kind, text: f.Detail || "", borrower: f.Borrower || "", by: li.createdBy?.user?.displayName || "" }; })
       .sort((a, b) => b.at.localeCompare(a.at));
   },
-  async addLog(tag, e) { await g("POST", this.items("equipmentLog"), { fields: { Title: LOG_KIND[e.type] || e.type, AssetTag: tag, Kind: e.type, Detail: e.text || "", Borrower: e.borrower || "" } }); },
+  async addLog(tag, e) { await g("POST", this.items("equipmentLog"), { fields: this.outF("equipmentLog", { Title: LOG_KIND[e.type] || e.type, AssetTag: tag, Kind: e.type, Detail: e.text || "", Borrower: e.borrower || "" }) }); },
 
-  async loadCons() { return (await gAll(this.items("supplies") + "?$expand=fields")).map(consFromSp); },
-  async createCons(p) { return consFromSp(await g("POST", this.items("supplies"), { fields: spFromCons(p) })); },
-  async updateCons(spId, p) { await g("PATCH", `${this.items("supplies")}/${spId}/fields`, spFromCons(p)); },
+  async loadCons() { return (await gAll(this.items("supplies") + "?$expand=fields")).map((li) => consFromSp(this.row("supplies", li))); },
+  async createCons(p) { return consFromSp(this.row("supplies", await g("POST", this.items("supplies"), { fields: this.outF("supplies", spFromCons(p)) }))); },
+  async updateCons(spId, p) { await g("PATCH", `${this.items("supplies")}/${spId}/fields`, this.outF("supplies", spFromCons(p))); },
   async deleteCons(spId, code) {
-    for (const li of await gAll(this.items("supplyLog") + `?$select=id&$expand=fields($select=BinCode)&$filter=fields/BinCode eq '${q1(code)}'`, FILTER_HDR))
-      await g("DELETE", `${this.items("supplyLog")}/${li.id}`);
+    for (const li of await gAll(this.logQuery("supplyLog", "BinCode", code, true), FILTER_HDR)) await g("DELETE", `${this.items("supplyLog")}/${li.id}`);
     await g("DELETE", `${this.items("supplies")}/${spId}`);
   },
   // Re-reads the current count and writes with If-Match, so two people tapping at once don't overwrite each other.
   async adjustQty(spId, delta) {
     for (let i = 0; i < 4; i++) {
       const li = await g("GET", `${this.items("supplies")}/${spId}?$expand=fields`);
-      const before = Number(li.fields.OnHand ?? 0), qty = Math.max(0, before + delta);
+      const before = Number(this.inF("supplies", li.fields).OnHand ?? 0), qty = Math.max(0, before + delta);
       if (qty === before) return { before, qty };
       // Last attempt goes without If-Match so a tenant that rejects the header can't block updates.
-      try { await g("PATCH", `${this.items("supplies")}/${spId}/fields`, { OnHand: qty }, i < 3 && li.eTag ? { "If-Match": li.eTag } : {}); return { before, qty }; }
+      try { await g("PATCH", `${this.items("supplies")}/${spId}/fields`, this.outF("supplies", { OnHand: qty }), i < 3 && li.eTag ? { "If-Match": li.eTag } : {}); return { before, qty }; }
       catch (e) { if (e.status !== 412) throw e; }
     }
     throw new Error("Someone else is updating this count. Try again in a moment.");
   },
   async loadSupplyLog(code) {
-    return (await gAll(this.items("supplyLog") + `?$expand=fields&$filter=fields/BinCode eq '${q1(code)}'`, FILTER_HDR))
-      .map((li) => ({ at: li.createdDateTime, kind: li.fields.Kind, delta: Number(li.fields.Change ?? 0), qty: Number(li.fields.OnHandAfter ?? 0), note: li.fields.Note || "", by: li.createdBy?.user?.displayName || "" }))
+    return (await gAll(this.logQuery("supplyLog", "BinCode", code), FILTER_HDR))
+      .map((li) => { const f = this.inF("supplyLog", li.fields); return { at: li.createdDateTime, kind: f.Kind, delta: Number(f.Change ?? 0), qty: Number(f.OnHandAfter ?? 0), note: f.Note || "", by: li.createdBy?.user?.displayName || "" }; })
       .sort((a, b) => b.at.localeCompare(a.at));
   },
-  async addSupplyLog(code, e) { await g("POST", this.items("supplyLog"), { fields: { Title: SUPPLY_KIND[e.kind] || e.kind, BinCode: code, Kind: e.kind, Change: e.delta, OnHandAfter: e.qty, Note: e.note || "" } }); },
+  async addSupplyLog(code, e) { await g("POST", this.items("supplyLog"), { fields: this.outF("supplyLog", { Title: SUPPLY_KIND[e.kind] || e.kind, BinCode: code, Kind: e.kind, Change: e.delta, OnHandAfter: e.qty, Note: e.note || "" }) }); },
 };
 
 /* ============================================================
@@ -471,9 +508,11 @@ const S = {
   gate("Loading", "Connecting to SharePoint…", "");
   try { await Store.init(); }
   catch (e) {
+    if (e.missingCols) return gate("Lists need updating", `These columns are missing: ${e.missingCols.map((m) => `<code>${esc(m)}</code>`).join(", ")}. Open <a href="setup.html">setup.html</a> and run it again to add them.`, "");
     if (e.missing) return gate("Lists not set up", `The SharePoint site is missing: ${e.missing.map((m) => `<code>${esc(m)}</code>`).join(", ")}. Open <a href="setup.html">setup.html</a> once to create them.`, "");
     if (e.status === 403 || e.status === 401) return gate("No access", "Your account can’t open the inventory site in SharePoint. Ask whoever manages the site to add you as a member.", "");
-    return gate("Can’t connect", `SharePoint said: ${esc(e.message)}. Check the <code>siteUrl</code> in config.js.`, "");
+    if (e.status === 404) return gate("Can’t open the SharePoint site", `The app is looking for <code>${esc(C.siteUrl)}</code>. Microsoft says that site doesn’t exist <b>or your account doesn’t have access to it</b>. If the inventory works for someone else, ask them to add you as a Member of that SharePoint site.`, `<button class="btn primary" onclick="location.reload()">Try again</button>`);
+    return gate("Can’t connect", `SharePoint said: ${esc(e.message)}. The app is looking for <code>${esc(C.siteUrl)}</code>.`, "");
   }
   try { await reload(); }
   catch (e) { return gate("Can’t load the inventory", esc(e.message), `<button class="btn primary" onclick="location.reload()">Try again</button>`); }
@@ -683,7 +722,7 @@ function modal(title, bodyHtml, submitLabel, onSubmit) {
     try { const msg = await onSubmit(new FormData(e.target)); if (msg) { err.textContent = msg; err.hidden = false; ok.disabled = false; ok.textContent = submitLabel; return; } closeModal(); }
     catch (ex) { ok.disabled = false; ok.textContent = submitLabel; err.textContent = "Couldn’t save: " + failMsg(ex); err.hidden = false; }
   });
-  setTimeout(() => $("#mForm .field")?.focus(), 30);
+  $("#mForm .field")?.focus();
 }
 function nextTag() {
   let max = 0; for (const t of S.items.keys()) { const m = t.match(/(\d+)$/); if (m) max = Math.max(max, +m[1]); }
